@@ -7,6 +7,9 @@ import json
 import os, sys
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from utils_folder.utils import Logger
+
+NOISE = [0, 0, 0] # control_vel, control_steering, state 
 
 SEGMENT_LENGTH = 10
 STEERING_LENGTH = 21e2
@@ -16,7 +19,7 @@ DENSITY_CURB = 0
 STEERING_DENSITY = 4
 RENDER = False
 # SAVE_DIR = '/media/DATA/tuner_inn/sim_random_more/'
-SAVE_DIR = '/workspace/data/tuner/sim_random/'
+SAVE_DIR = '/workspace/data/tuner/sim_random_noise/'
 
 with open('maps/config_example_map.yaml') as file:
     conf_dict = yaml.load(file, Loader=yaml.FullLoader)
@@ -87,7 +90,8 @@ def main():
     """
     main entry point
     """
-    
+    logger = Logger(SAVE_DIR, 'noise_data')
+    logger.write_file(__file__)
     
     for friction in frictions: 
         print('friction', friction)
@@ -123,7 +127,8 @@ def main():
                 step_count += 1
                 try:
                     for i in range(SEGMENT_LENGTH):
-                        obs, rew, done, info = env.step(np.array([[steer, vel]]))
+                        obs, rew, done, info = env.step(np.array([[steer + np.random.normal(scale=NOISE[0]),
+                                                                   vel + np.random.normal(scale=NOISE[1])]]))
                         if RENDER: env.render(mode='human_fast')
                         
                     state = np.array([obs['x3'][0], obs['x4'][0], obs['x6'][0], obs['x11'][0]])
@@ -132,7 +137,7 @@ def main():
                     ## x6 = yaw rate
                     ## x11 = velocity in y-direction
                     control = np.array([steer, vel])
-                    states.append(state)
+                    states.append(state + np.random.normal(scale=NOISE[2], size=state.shape))
                     controls.append(control)
                     
                     if step_count % RESET_STEP == 0:
@@ -160,11 +165,11 @@ def main():
                 
                 
         
-        np.save(SAVE_DIR+'states_f{}_v{}_step{}.npy'.format(int(friction*10), 
-                                                            int(np.round(start_vel, decimals=2)*100), 
+        np.save(SAVE_DIR+'states_f{}_v{}_step{}.npy'.format(int(np.round(friction*10)), 
+                                                            int(np.round(start_vel*100)), 
                                                             RESET_STEP), np.stack(total_states))
-        np.save(SAVE_DIR+'controls_f{}_v{}_step{}.npy'.format(int(friction*10), 
-                                                                int(np.round(start_vel, decimals=2)*100), 
+        np.save(SAVE_DIR+'controls_f{}_v{}_step{}.npy'.format(int(np.round(friction*10)), 
+                                                                int(np.round(start_vel*100)), 
                                                                 RESET_STEP), np.stack(total_controls))
 
         print('Real elapsed time:', time.time() - start)
