@@ -7,7 +7,9 @@ import json
 import os, sys
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from utils_folder.utils import Logger
+from utils.utils import Logger
+from planner import pid
+from utils.mb_model_params import param1
 
 NOISE = [0, 0, 0] # control_vel, control_steering, state 
 
@@ -18,8 +20,9 @@ VEL_SAMPLE_UP = 0.1
 DENSITY_CURB = 0
 STEERING_DENSITY = 4
 RENDER = False
-# SAVE_DIR = '/media/DATA/tuner_inn/sim_random_more/'
-SAVE_DIR = '/workspace/data/tuner/sim_random_noise/'
+ACC_VS_CONTROL = True
+SAVE_DIR = '/home/lucerna/Documents/DATA/tuner_inn/random_acc/'
+# SAVE_DIR = '/workspace/data/tuner/sim_random_noise/'
 
 with open('maps/config_example_map.yaml') as file:
     conf_dict = yaml.load(file, Loader=yaml.FullLoader)
@@ -73,6 +76,7 @@ def warm_up(env, vel, warm_up_steps):
             step_count += 1
         except ZeroDivisionError:
             print('error warmup: ', step_count)
+    return obs
 
 
 
@@ -110,11 +114,16 @@ def main():
         step_count = 0
             
         # init vector = [x,y,yaw,steering angle, velocity, yaw_rate, beta]
-        env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext,
-                num_agents=1, timestep=0.01, model='MB', drive_control_mode='vel',
-                steering_control_mode='angle')
+        if ACC_VS_CONTROL:
+            env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext,
+                    num_agents=1, timestep=0.01, model='MB', drive_control_mode='acc',
+                    steering_control_mode='vel')
+        else:
+            env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext,
+                        num_agents=1, timestep=0.01, model='MB', drive_control_mode='vel',
+                        steering_control_mode='angle')
         vel = np.random.uniform(start_vel, start_vel+VEL_SAMPLE_UP)
-        warm_up(env, vel, 1000)
+        obs = warm_up(env, vel, 1000)
             
         with tqdm(total=len(steers)) as pbar:
             while step_count < len(steers):
@@ -122,6 +131,14 @@ def main():
                 
                 env.params['tire_p_dy1'] = friction  # mu_y
                 env.params['tire_p_dx1'] = friction  # mu_x
+                
+                if ACC_VS_CONTROL:
+                    # steering angle velocity input to steering velocity acceleration input
+                    accl, sv = pid(vel, steer, obs['x4'][0], obs['x3'][0], param1['sv_max'], param1['a_max'],
+                                param1['v_max'], param1['v_min'])
+                    control = np.array([accl, sv])
+                else:
+                    control = np.array([steer, vel])
 
                 pbar.update(1)
                 step_count += 1
@@ -142,7 +159,7 @@ def main():
                     
                     if step_count % RESET_STEP == 0:
                         vel = np.random.uniform(start_vel, start_vel+VEL_SAMPLE_UP)
-                        warm_up(env, vel, 1000)
+                        _ = warm_up(env, vel, 1000)
                         if len(states) > 0:
                             # print(np.vstack(states).shape)
                             total_controls.append(np.vstack(controls))
@@ -157,7 +174,7 @@ def main():
                     pbar.refresh()
                     steers = get_steers(STEERING_LENGTH * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_DENSITY))
                     if DENSITY_CURB != 0: steers = curb_dense_points(steers, DENSITY_CURB)
-                    warm_up(env, vel, 1000)
+                    _ = warm_up(env, vel, 1000)
                     controls = []
                     states = []
                     
@@ -165,12 +182,10 @@ def main():
                 
                 
         
-        np.save(SAVE_DIR+'states_f{}_v{}_step{}.npy'.format(int(np.round(friction*10)), 
-                                                            int(np.round(start_vel*100)), 
-                                                            RESET_STEP), np.stack(total_states))
-        np.save(SAVE_DIR+'controls_f{}_v{}_step{}.npy'.format(int(np.round(friction*10)), 
-                                                                int(np.round(start_vel*100)), 
-                                                                RESET_STEP), np.stack(total_controls))
+        np.save(SAVE_DIR+'states_f{}_v{}.npy'.format(int(np.rint(friction*10)), 
+                                                            int(np.rint(start_vel*100))), np.stack(total_states))
+        np.save(SAVE_DIR+'controls_f{}_v{}.npy'.format(int(np.rint(friction*10)), 
+                                                                int(np.rint(start_vel*100))), np.stack(total_controls))
 
         print('Real elapsed time:', time.time() - start)
 

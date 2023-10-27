@@ -205,7 +205,7 @@ class PurePursuitPlanner:
             else:
                 self.drawn_waypoints[i].vertices = [scaled_points[i, 0], scaled_points[i, 1], 0.]
 
-    def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta):
+    def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta, targe_vel=5):
         """
         gets the current waypoint to follow
         """
@@ -215,7 +215,7 @@ class PurePursuitPlanner:
             lookahead_point, i2, t2 = first_point_on_trajectory_intersecting_circle(position, lookahead_distance, wpts,
                                                                                     i + t, wrap=True)
             if i2 == None:
-                return None
+                return None, i
             current_waypoint = np.empty((3,))
             # x, y
             current_waypoint[0:2] = wpts[i2, :]
@@ -224,30 +224,30 @@ class PurePursuitPlanner:
                 current_waypoint[2] = 5
             else:
                 current_waypoint[2] = waypoints[i, self.conf.wpt_vind]
-            return current_waypoint
+            return current_waypoint, i
         elif nearest_dist < self.max_reacquire:
             if self.conf.wpt_vind == -1:
-                speed = 5
+                speed = targe_vel
             else:
                 speed = waypoints[i, self.conf.wpt_vind]
-            return np.append(wpts[i, :], speed)
+            return np.append(wpts[i, :], speed), i
         else:
-            return None
+            return None, i
 
-    def plan(self, pose_x, pose_y, pose_theta, lookahead_distance, vgain):
+    def plan(self, pose_x, pose_y, pose_theta, lookahead_distance, vgain, targe_vel=5):
         """
         gives actuation given observation
         """
         position = np.array([pose_x, pose_y])
-        lookahead_point = self._get_current_waypoint(self.waypoints, lookahead_distance, position, pose_theta)
+        lookahead_point, ind = self._get_current_waypoint(self.waypoints, lookahead_distance, position, pose_theta, targe_vel)
 
         if lookahead_point is None:
-            return 4.0, 0.0
+            return 4.0, 0.0, 0
 
         speed, steering_angle = get_actuation(pose_theta, lookahead_point, position, lookahead_distance, self.wheelbase)
         speed = vgain * speed
 
-        return speed, steering_angle
+        return speed, steering_angle, ind
     
 @njit(cache=True)
 def pid(speed, steer, current_speed, current_steer, max_sv, max_a, max_v, min_v):
