@@ -10,10 +10,10 @@ from utils.mb_model_params import param1
 
 SEGMENT_LENGTH = 10
 RENDER = False
-SAVE_DIR = '/home/lucerna/Documents/DATA/tuner_inn/track39_2/'
+SAVE_DIR = '/home/lucerna/Documents/DATA/tuner_inn/track39/'
 MAP_DIR = './f1tenth_racetracks/'
 ACC_VS_CONTROL = True
-VEL_SAMPLE_UP = 1
+VEL_SAMPLE_UP = 0.3
 SAVE_STEP = 210
 
 
@@ -37,10 +37,7 @@ def warm_up(env, vel, warm_up_steps):
             print('error warmup: ', step_count)
             
 
-if len(sys.argv) > 1:
-    start_vel = float(sys.argv[1])
-    # vels = [vel]
-    vels = np.arange(start_vel, start_vel + 0.5, 0.1)
+
     
 def load_map(MAP_DIR, map_info, conf, scale=1, reverse=False):
     """
@@ -71,6 +68,11 @@ def load_map(MAP_DIR, map_info, conf, scale=1, reverse=False):
     return waypoints, conf, init_theta
 
 
+if len(sys.argv) > 1:
+    start_vel = float(sys.argv[1])
+    # vels = [vel]
+    vels = np.arange(start_vel, start_vel + 0.3, 0.1)
+
 def main():
     """
     main entry point
@@ -79,7 +81,7 @@ def main():
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
     
-    frictions = [0.5, 0.8, 1.1]
+    frictions = [0.5, 0.65, 0.8]
     # vels = np.arange(8, 9, 1)
     # print('vels', vels)
 
