@@ -7,7 +7,7 @@ import os, sys
 from planner import PurePursuitPlanner, get_render_callback, pid
 from utils.mb_model_params import param1
 import matplotlib.pyplot as plt
-from utils.frenet_utils import cartesian_to_frenet, frenet_to_cartesian
+from utils.frenet_utils import cartesian_to_frenet, frenet_to_cartesian, centerline_to_frenet
 
 SEGMENT_LENGTH = 10
 RENDER = True
@@ -90,16 +90,19 @@ def friction_func(pose_frenet, waypoints):
         ey = min(abs(ey), ey_max)
         return 0.5 - 0.3 * ey / ey_max
 
-def test_friction_func():
+def test_friction_func(map_ind):
     with open('maps/config_example_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
-    map_ind = 11    
     map_info = np.genfromtxt('maps/map_info.txt', delimiter='|', dtype='str')[map_ind][1:]
     waypoints, conf, init_theta = load_map(MAP_DIR, map_info, conf, scale=7, reverse=False)
 
+    # Check if the waypoints are of the form [x_m, y_m, w_tr_right_m, w_tr_left_m]
+    if waypoints.shape[1] == 4:
+        waypoints = centerline_to_frenet(waypoints)
+        
     # Sample 10,000 points over s, each with 100 points over ey
-    s = np.linspace(0, np.max(waypoints[:, 0]), 10000)
+    s = np.linspace(0, np.max(waypoints[:, 0]), 1000)
     ey = np.linspace(-10, 10, 20)
     mu = np.zeros((s.shape[0], ey.shape[0]))
     for i in range(s.shape[0]):
@@ -124,8 +127,10 @@ def main():
     """
     main entry point
     """
+    map_ind = 39
+
     # Visualize friction function
-    test_friction_func()
+    test_friction_func(map_ind)
 
     with open('maps/config_example_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
@@ -135,7 +140,6 @@ def main():
     vels = np.arange(8, 9, 1)
 
     # for map_ind in range(7, 40):
-    map_ind = 39
     
     for friction_func_ in friction_funcs:
         total_states = []
@@ -146,6 +150,11 @@ def main():
                 print(map_ind, map_info[0], 'reverse', reverse)
                 waypoints, conf, init_theta = load_map(MAP_DIR, map_info, conf, scale=7, reverse=reverse)
                 
+                waypoints_frenet = waypoints.copy()
+                # Check if the waypoints are of the form [x_m, y_m, w_tr_right_m, w_tr_left_m]
+                if waypoints.shape[1] == 4:
+                    waypoints_frenet = centerline_to_frenet(waypoints)
+                    
                 print('vel', vel)
                 print('friction', friction_func_.__name__)
 
@@ -180,9 +189,9 @@ def main():
                     speed, steer, ind = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], work['tlad'],
                                                 work['vgain'], target_vel)
                     
-                    pose_frenet = cartesian_to_frenet(np.array([obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0]]), waypoints)
-                    env.params['tire_p_dy1'] = friction_func_(pose_frenet, waypoints)  # mu_y  # mu_y
-                    env.params['tire_p_dx1'] = friction_func_(pose_frenet, waypoints)  # mu_y  # mu_x
+                    pose_frenet = cartesian_to_frenet(np.array([obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0]]), waypoints_frenet)
+                    env.params['tire_p_dy1'] = friction_func_(pose_frenet, waypoints_frenet)  # mu_y  # mu_y
+                    env.params['tire_p_dx1'] = friction_func_(pose_frenet, waypoints_frenet)  # mu_y  # mu_x
                     
                     if ACC_VS_CONTROL:
                         # steering angle velocity input to steering velocity acceleration input
@@ -221,8 +230,8 @@ def main():
                             f', vx {obs["x4"][0]:.2f}, vy {obs["x11"][0]:.2f}, steer {obs["x3"][0]:.2f}')
 
                 print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time() - start)
-        np.save(SAVE_DIR + 'states_f{}_v{}.npy'.format(int(np.rint(friction*10)), int(np.rint(vels[0]*100))), total_states)
-        np.save(SAVE_DIR + 'controls_f{}_v{}.npy'.format(int(np.rint(friction*10)), int(np.rint(vels[0]*100))), total_controls)
+        np.save(SAVE_DIR + 'states_f{}_v{}.npy'.format(friction_func_.__name__, int(np.rint(vels[0]*100))), total_states)
+        np.save(SAVE_DIR + 'controls_f{}_v{}.npy'.format(friction_func_.__name__, int(np.rint(vels[0]*100))), total_controls)
 
             
 

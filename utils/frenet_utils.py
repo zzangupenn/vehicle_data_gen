@@ -120,7 +120,10 @@ def cartesian_to_frenet(pose, trajectory):
     if trajectory[min_id, 4] == 0:
         eyaw = pose[2] - trajectory[min_id, 3]
 
-        vector = (trajectory[min_id + 1, 1:3] - trajectory[min_id, 1:3])[np.newaxis].T
+        if(min_id == trajectory.shape[0] - 1):
+            vector = (trajectory[0, 1:3] - trajectory[min_id - 1, 1:3])[np.newaxis].T # Loop back to the start
+        else:
+            vector = (trajectory[min_id + 1, 1:3] - trajectory[min_id, 1:3])[np.newaxis].T
 
         vector = vector / np.linalg.norm(vector)
 
@@ -130,7 +133,10 @@ def cartesian_to_frenet(pose, trajectory):
 
         point = trajectory[min_id, 1:3] + projection
 
-        ey = np.linalg.norm(point - pose[0:2]) * determine_side(trajectory[min_id, 1:3], trajectory[min_id + 1, 1:3], pose[0:2])
+        if(min_id == trajectory.shape[0] - 1):
+            ey = np.linalg.norm(point - pose[0:2]) * determine_side(trajectory[min_id, 1:3], trajectory[0, 1:3], pose[0:2])
+        else:
+            ey = np.linalg.norm(point - pose[0:2]) * determine_side(trajectory[min_id, 1:3], trajectory[min_id + 1, 1:3], pose[0:2])
         
         s = trajectory[min_id, 0] + np.linalg.norm(point - trajectory[min_id, 1:3])
 
@@ -165,3 +171,44 @@ def cartesian_to_frenet(pose, trajectory):
         eyaw += 2.0 * np.pi
 
     return np.array([s, ey, eyaw])
+
+def centerline_to_frenet(trajectory, velocity=5.0):   
+    '''
+    Converts a trajectory in the form [x_m, y_m, w_tr_right_m, w_tr_left_m] to [s_m; x_m; y_m; psi_rad; kappa_radpm; vx_mps; ax_mps2]
+    Assumes constant velocity
+
+    Parameters
+    ----------
+    trajectory : np.array
+        Trajectory in the form [x_m, y_m, w_tr_right_m, w_tr_left_m]
+    velocity : float, optional
+        Velocity of the vehicle, by default 5.0
+    '''
+    # Initialize variables
+    s = 0.0
+    x = trajectory[0, 0]
+    y = trajectory[0, 1]
+    psi = 0.0
+    kappa = 0.0
+    vx = velocity
+    ax = 0.0
+
+    # Initialize output
+    output = np.zeros((trajectory.shape[0], 7))
+    output[0, :] = np.array([s, x, y, psi, kappa, vx, ax])
+
+    # Iterate over trajectory
+    for i in range(1, trajectory.shape[0]):
+        # Calculate s
+        s += np.sqrt((trajectory[i, 0] - trajectory[i-1, 0])**2 + (trajectory[i, 1] - trajectory[i-1, 1])**2)
+        # Calculate psi
+        psi = np.arctan2((trajectory[i, 1] - trajectory[i-1, 1]), (trajectory[i, 0] - trajectory[i-1, 0]))
+        # Calculate kappa
+        kappa = (trajectory[i, 3] - trajectory[i, 2]) / (2 * np.sqrt((trajectory[i, 0] - trajectory[i-1, 0])**2 + (trajectory[i, 1] - trajectory[i-1, 1])**2))
+        # Calculate ax
+        ax = 0.0
+
+        # Save to output
+        output[i, :] = np.array([s, trajectory[i, 0], trajectory[i, 1], psi, kappa, vx, ax])
+
+    return output
