@@ -5,6 +5,7 @@ import numpy as np
 from argparse import Namespace
 import json
 import os, sys
+os.environ['F110GYM_PLOT_SCALE'] = str(5.)
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from utils.utils import Logger
@@ -13,15 +14,17 @@ from utils.mb_model_params import param1
 
 NOISE = [0, 0, 0] # control_vel, control_steering, state 
 
+EXP_NAME = 'fric3_rand'
 SEGMENT_LENGTH = 10
-STEERING_LENGTH = 21e2
+STEERING_LENGTH = 21e2 * 5
 RESET_STEP = 210
-VEL_SAMPLE_UP = 0.1
+VEL_SAMPLE_UP = 0.5
 DENSITY_CURB = 0
-STEERING_DENSITY = 4
-RENDER = False
+STEERING_PEAK_DENSITY = 4
+RENDER = True
 ACC_VS_CONTROL = True
-SAVE_DIR = '/home/lucerna/Documents/DATA/tuner_inn/random_acc/'
+SAVE_DIR = '/home/lucerna/Documents/DATA/tuner/' + EXP_NAME + '/'
+# SAVE_DIR = '/workspace/data/tuner/' + EXP_NAME + '/'
 # SAVE_DIR = '/workspace/data/tuner/sim_random_noise/'
 
 with open('maps/config_example_map.yaml') as file:
@@ -48,7 +51,10 @@ def get_steers(sample_length, segment_length=10, peak_num=200):
     z = z/y_upper
     z = z*2
     z = z - 1.
-    return z * 0.5
+    z = z * 0.5
+    z[np.where(z > 0.4)] = 0.4
+    z[np.where(z < -0.4)] = -0.4
+    return z
 
 def curb_dense_points(samples, density=0.01):
     del_list = []
@@ -70,9 +76,10 @@ def warm_up(env, vel, warm_up_steps):
         np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]))
 
     step_count = 0
-    while (step_count < warm_up_steps) and (np.abs(obs['x3'][0] - vel) > 0.01):
+    while (step_count < warm_up_steps) and (np.abs(obs['x4'][0] - vel) > 0.01):
         try:
-            obs, step_reward, done, info = env.step(np.array([[0.0, vel]]))
+            accel = vel - np.abs(obs['x4'][0])
+            obs, step_reward, done, info = env.step(np.array([[0.0, accel]]))
             step_count += 1
         except ZeroDivisionError:
             print('error warmup: ', step_count)
@@ -81,8 +88,8 @@ def warm_up(env, vel, warm_up_steps):
 
 
 
-frictions = [0.5, 0.8, 1.1]
-# frictions = [0.8]
+# frictions = [0.5, 0.8, 1.1]
+frictions = [0.8]
 
 if len(sys.argv) > 1:
     start_vel = float(sys.argv[1])
@@ -94,7 +101,7 @@ def main():
     """
     main entry point
     """
-    logger = Logger(SAVE_DIR, 'noise_data')
+    logger = Logger(SAVE_DIR, EXP_NAME)
     logger.write_file(__file__)
     
     for friction in frictions: 
@@ -106,12 +113,13 @@ def main():
 
         states = []
         controls = []
-        steers = get_steers(STEERING_LENGTH * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_DENSITY))
+        steers = get_steers(RESET_STEP * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_PEAK_DENSITY))
         if DENSITY_CURB != 0: steers = curb_dense_points(steers, DENSITY_CURB)
         # plt.plot(np.arange(steers.shape[0]), steers)
         # plt.show()
 
         step_count = 0
+        steering_count = 0
             
         # init vector = [x,y,yaw,steering angle, velocity, yaw_rate, beta]
         if ACC_VS_CONTROL:
@@ -122,12 +130,12 @@ def main():
             env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext,
                         num_agents=1, timestep=0.01, model='MB', drive_control_mode='vel',
                         steering_control_mode='angle')
-        vel = np.random.uniform(start_vel, start_vel+VEL_SAMPLE_UP)
+        vel = np.random.uniform(start_vel-VEL_SAMPLE_UP/2, start_vel+VEL_SAMPLE_UP/2)
         obs = warm_up(env, vel, 1000)
             
-        with tqdm(total=len(steers)) as pbar:
-            while step_count < len(steers):
-                steer = steers[step_count]
+        with tqdm(total=STEERING_LENGTH) as pbar:
+            while step_count < STEERING_LENGTH:
+                steer = steers[steering_count]
                 
                 env.params['tire_p_dy1'] = friction  # mu_y
                 env.params['tire_p_dx1'] = friction  # mu_x
@@ -136,16 +144,20 @@ def main():
                     # steering angle velocity input to steering velocity acceleration input
                     accl, sv = pid(vel, steer, obs['x4'][0], obs['x3'][0], param1['sv_max'], param1['a_max'],
                                 param1['v_max'], param1['v_min'])
-                    control = np.array([accl, sv])
+                    control = np.array([sv, accl])
                 else:
                     control = np.array([steer, vel])
+                    
+                print('accl', accl, 'vel', vel, 'start_vel', start_vel, 'x4', obs['x4'][0])
+                # print('sv', sv, 'steer', steer, 'x3', obs['x3'][0])
 
                 pbar.update(1)
                 step_count += 1
+                steering_count += 1
                 try:
                     for i in range(SEGMENT_LENGTH):
-                        obs, rew, done, info = env.step(np.array([[steer + np.random.normal(scale=NOISE[0]),
-                                                                   vel + np.random.normal(scale=NOISE[1])]]))
+                        obs, rew, done, info = env.step(np.array([[control[0] + np.random.normal(scale=NOISE[0]),
+                                                                   control[1] + np.random.normal(scale=NOISE[1])]]))
                         if RENDER: env.render(mode='human_fast')
                         
                     state = np.array([obs['x3'][0], obs['x4'][0], obs['x6'][0], obs['x11'][0]])
@@ -153,11 +165,14 @@ def main():
                     ## x4 = velocity in x-direction
                     ## x6 = yaw rate
                     ## x11 = velocity in y-direction
-                    control = np.array([steer, vel])
+                    # control = np.array([steer, vel])
                     states.append(state + np.random.normal(scale=NOISE[2], size=state.shape))
                     controls.append(control)
+                    # print(control)
                     
                     if step_count % RESET_STEP == 0:
+                        steering_count = 0
+                        steers = get_steers(RESET_STEP * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_PEAK_DENSITY))
                         vel = np.random.uniform(start_vel, start_vel+VEL_SAMPLE_UP)
                         _ = warm_up(env, vel, 1000)
                         if len(states) > 0:
@@ -168,11 +183,13 @@ def main():
                             states = []
                             
                 except Exception as e:
+                    steers = get_steers(RESET_STEP * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_PEAK_DENSITY))
                     print(e, ' at: ', step_count, ', reset to ', step_count//RESET_STEP * RESET_STEP)
                     step_count = step_count//RESET_STEP * RESET_STEP
+                    steering_count = 0
                     pbar.n = step_count
                     pbar.refresh()
-                    steers = get_steers(STEERING_LENGTH * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_DENSITY))
+                    steers = get_steers(STEERING_LENGTH * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_PEAK_DENSITY))
                     if DENSITY_CURB != 0: steers = curb_dense_points(steers, DENSITY_CURB)
                     _ = warm_up(env, vel, 1000)
                     controls = []

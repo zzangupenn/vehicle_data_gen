@@ -9,7 +9,7 @@ from utils.mb_model_params import param1
 
 
 SEGMENT_LENGTH = 10
-RENDER = False
+RENDER = True
 SAVE_DIR = '/home/lucerna/Documents/DATA/tuner_inn/track39/'
 MAP_DIR = './f1tenth_racetracks/'
 ACC_VS_CONTROL = True
