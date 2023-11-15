@@ -15,29 +15,7 @@ MAP_DIR = './f1tenth_racetracks/'
 ACC_VS_CONTROL = True
 VEL_SAMPLE_UP = 0.3
 SAVE_STEP = 210
-
-
-
-def warm_up(env, vel, warm_up_steps):
-    # init vector = [x,y,yaw,steering angle, velocity, yaw_rate, beta]
-    
-    obs, step_reward, done, info = env.reset(
-        np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]))
-
-    step_count = 0
-    while (step_count < warm_up_steps) and (np.abs(obs['x3'][0] - vel) > 0.01):
-        try:
-            obs, step_reward, done, info = env.step(np.array([[0.0, vel]]))
-            if RENDER: 
-                env.render(mode='human_fast')
-                print(f'x {obs["x1"][0]:.2f}, y {obs["x2"][0]:.2f}, yaw {obs["x5"][0]:.2f}, yawrate {obs["x6"][0]:.2f}' + \
-                        f', vx {obs["x4"][0]:.2f}, vy {obs["x11"][0]:.2f}, steer {obs["x3"][0]:.2f}')
-            step_count += 1
-        except ZeroDivisionError:
-            print('error warmup: ', step_count)
-            
-
-
+        
     
 def load_map(MAP_DIR, map_info, conf, scale=1, reverse=False):
     """

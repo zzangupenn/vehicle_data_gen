@@ -1,0 +1,161 @@
+# standard imports
+import torch
+import torch.nn as nn
+from torch.nn.functional import kl_div
+# from sklearn.datasets import make_moons, make_circles, make_blobs
+import matplotlib.pyplot as plt
+from torch.distributions import MultivariateNormal
+import numpy as np
+from utils.utils import DataProcessor, ConfigJSON, Logger
+# from utils.torch_utils import PositionalEncoding_torch
+
+TEST = 0
+TRAIN_DATADIR = '/workspace/data/tuner/fric3_rand_f8'
+if TEST:
+    DATADIR = TRAIN_DATADIR + '_test/'
+else:
+    DATADIR = TRAIN_DATADIR + '/'
+TRAIN_SEGMENT = 2
+TIME_INTERVAL = 0.1
+SAVE_NAME = '_f8'
+
+logger = Logger(DATADIR, SAVE_NAME)
+logger.write_file(__file__)
+
+# vlist = np.hstack([np.arange(0, 1, 0.1) + i for i in np.arange(5, 9)])
+vlist = np.arange(8.0, 18.0, 0.05)
+# flist = [0.5, 0.8, 1.1]
+flist = [0.8]
+dp = DataProcessor()
+c = ConfigJSON()
+all_friction_states = []
+all_friction_control = []
+for ind, friction_ in enumerate(flist):
+    total_states = []
+    total_controls = []
+    for vel in vlist:
+        filename = 'states_f{}_v{}.npy'.format(int(friction_*10),
+                                                       int(np.rint(vel*100)))
+        controls_filename = 'controls_f{}_v{}.npy'.format(int(friction_*10), 
+                                                                  int(np.rint(vel*100)))
+        
+        # filename = '/states_f{}_v{}_step{}.npy'.format(int(friction_*10),
+        #                                                int(np.rint(vel*100)),
+        #                                                 # int(np.round(vel, decimals=2)*100),
+        #                                                210)
+        # controls_filename = '/controls_f{}_v{}_step{}.npy'.format(int(friction_*10), 
+        #                                                           int(np.rint(vel*100)),
+        #                                                         #   int(np.round(vel, decimals=2)*100),
+        #                                                           210)
+        
+        states = np.load(DATADIR + filename)
+        controls = np.load(DATADIR + controls_filename)
+        total_states.append(states[:, :])
+        total_controls.append(controls[:, :])
+
+    all_friction_states.append(np.vstack(total_states))
+    all_friction_control.append(np.vstack(total_controls))
+
+## normalization
+normalization_param = []
+for ind in range(4):
+    _, param = dp.data_normalize(np.vstack(np.vstack(all_friction_states))[:, ind])
+    normalization_param.append(param)
+
+dynamics = []
+for ind, friction_ in enumerate(flist):
+    states = np.vstack(all_friction_states[ind])
+    states = np.vstack([states[i:i+2][None, :] for i in range(0, len(states)-2+1, 2)])
+    dynamics.append((states[:, 1, 1:] - states[:, 0, 1:]) / TIME_INTERVAL)
+
+dynamics = np.vstack(dynamics)
+for ind in range(3):
+    _, param = dp.data_normalize(dynamics[:, ind])
+    normalization_param.append(param)
+    
+for ind in range(2):
+    _, param = dp.data_normalize(np.vstack(np.vstack(all_friction_control))[:, ind])
+    normalization_param.append(param)
+print(normalization_param)
+    
+c.d['normalization_param'] = normalization_param
+c.save_file(DATADIR + 'config' + SAVE_NAME + '.json')
+
+# plt.plot(np.arange(dynamics.shape[0]), dynamics[:, 0], '.', markersize=1)
+# plt.show()
+# plt.plot(np.arange(dynamics.shape[0]), dynamics[:, 1], '.', markersize=1)
+# plt.show()
+# plt.plot(np.arange(dynamics.shape[0]), dynamics[:, 2], '.', markersize=1)
+# plt.show()
+
+# c = ConfigJSON()
+# c.load_file(TRAIN_DATADIR + '/config.json')
+
+if TEST:
+    c = ConfigJSON()
+    c.load_file(TRAIN_DATADIR + '/config' + SAVE_NAME + '.json')
+    normalization_param = c.d['normalization_param']
+
+train_states_fric = []
+train_controls_fric = []
+train_dynamics_fric = []
+train_labels_fric = []
+# normalization_param[0] = [2, -1]
+for ind, friction_ in enumerate(flist):
+    states_fric = all_friction_states[ind]
+    controls_fric = all_friction_control[ind]
+    
+    train_states = []
+    train_controls = []
+    train_dynamics = []
+    train_labels = []
+    
+    for segment_ind in range(states_fric.shape[0]):
+    # for segment_ind in range(1):
+        states = states_fric[segment_ind]
+        controls = controls_fric[segment_ind]
+        
+        states = np.vstack([states[i:i+TRAIN_SEGMENT][None, :] for i in range(1, len(states)-TRAIN_SEGMENT+1, TRAIN_SEGMENT)])
+        controls = np.vstack([controls[i:i+TRAIN_SEGMENT][None, :] for i in range(1, len(controls)-TRAIN_SEGMENT+1, TRAIN_SEGMENT)])
+        dynamics = (states[:, 1:, 1:] - states[:, :-1, 1:]) / TIME_INTERVAL
+        label = [ind] * dynamics.shape[0]
+        
+        for ind2 in range(4):
+            states[:, :, ind2] = dp.runtime_normalize(states[:, :, ind2], normalization_param[ind2])
+        
+        for ind2 in range(4, 7):
+            # print(dynamics[0, 0, ind2-4])
+            dynamics[:, :, ind2-4] = dp.runtime_normalize(dynamics[:, :, ind2-4], normalization_param[ind2])
+        for ind2 in range(7, 9):
+            controls[:, :, ind2-7] = dp.runtime_normalize(controls[:, :, ind2-7], normalization_param[ind2])
+        
+        
+        # print('dynamics', dynamics.shape)
+        # print('states', states.shape)
+        
+        train_states.append(states)
+        train_controls.append(controls)
+        train_dynamics.append(dynamics)
+        train_labels.append(label)
+            
+    train_states_fric.append(np.vstack(train_states))
+    train_controls_fric.append(np.vstack(train_controls))
+    train_dynamics_fric.append(np.vstack(train_dynamics))
+    train_labels_fric.append(np.hstack(train_labels))
+    
+train_states_fric = np.array(train_states_fric)
+train_controls_fric = np.array(train_controls_fric)
+train_dynamics_fric = np.array(train_dynamics_fric)
+train_labels_fric = np.array(train_labels_fric)
+    
+print('train_states', train_states_fric.shape)
+print('train_dynamics_fric', train_dynamics_fric.shape)
+print('train_labels', train_labels_fric.shape)
+
+
+
+np.savez(DATADIR + 'train_data' + SAVE_NAME, 
+         train_states=train_states_fric, 
+         train_controls=train_controls_fric, 
+         train_dynamics=train_dynamics_fric,
+         train_labels=train_labels_fric)

@@ -14,17 +14,17 @@ from utils.mb_model_params import param1
 
 NOISE = [0, 0, 0] # control_vel, control_steering, state 
 
-EXP_NAME = 'fric3_rand'
+EXP_NAME = 'fric3_rand_f8'
 SEGMENT_LENGTH = 10
-STEERING_LENGTH = 21e2 * 5
+STEERING_LENGTH = 21e2 * 3
 RESET_STEP = 210
-VEL_SAMPLE_UP = 0.5
+VEL_SAMPLE_UP = 0.3
 DENSITY_CURB = 0
 STEERING_PEAK_DENSITY = 4
-RENDER = True
+RENDER = False
 ACC_VS_CONTROL = True
-SAVE_DIR = '/home/lucerna/Documents/DATA/tuner/' + EXP_NAME + '/'
-# SAVE_DIR = '/workspace/data/tuner/' + EXP_NAME + '/'
+# SAVE_DIR = '/home/lucerna/Documents/DATA/tuner/' + EXP_NAME + '/'
+SAVE_DIR = '/workspace/data/tuner/' + EXP_NAME + '/'
 # SAVE_DIR = '/workspace/data/tuner/sim_random_noise/'
 
 with open('maps/config_example_map.yaml') as file:
@@ -76,13 +76,14 @@ def warm_up(env, vel, warm_up_steps):
         np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]))
 
     step_count = 0
-    while (step_count < warm_up_steps) and (np.abs(obs['x4'][0] - vel) > 0.01):
+    while (np.abs(obs['x4'][0] - vel) > 0.01):
         try:
-            accel = vel - np.abs(obs['x4'][0])
+            accel = (vel - obs['x4'][0]) * 0.1
             obs, step_reward, done, info = env.step(np.array([[0.0, accel]]))
             step_count += 1
         except ZeroDivisionError:
             print('error warmup: ', step_count)
+    print('warmup step: ', step_count, 'error', obs['x4'][0], vel)
     return obs
 
 
@@ -130,11 +131,13 @@ def main():
             env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext,
                         num_agents=1, timestep=0.01, model='MB', drive_control_mode='vel',
                         steering_control_mode='angle')
-        vel = np.random.uniform(start_vel-VEL_SAMPLE_UP/2, start_vel+VEL_SAMPLE_UP/2)
-        obs = warm_up(env, vel, 1000)
-            
+        # vel = np.random.uniform(start_vel-VEL_SAMPLE_UP/2, start_vel+VEL_SAMPLE_UP/2)
+        vel = start_vel + np.random.uniform(-VEL_SAMPLE_UP/2, VEL_SAMPLE_UP/2)
+        obs = warm_up(env, vel, 10000)
         with tqdm(total=STEERING_LENGTH) as pbar:
             while step_count < STEERING_LENGTH:
+                if step_count % 42 == 0 and (step_count != 0) and (step_count % RESET_STEP != 0):
+                    vel = start_vel + np.random.uniform(-VEL_SAMPLE_UP/2, VEL_SAMPLE_UP/2)
                 steer = steers[steering_count]
                 
                 env.params['tire_p_dy1'] = friction  # mu_y
@@ -142,13 +145,16 @@ def main():
                 
                 if ACC_VS_CONTROL:
                     # steering angle velocity input to steering velocity acceleration input
-                    accl, sv = pid(vel, steer, obs['x4'][0], obs['x3'][0], param1['sv_max'], param1['a_max'],
+                    v_combined = np.sqrt(obs['x4'][0] ** 2 + obs['x11'][0] ** 2)
+                    accl, sv = pid(vel, steer, v_combined, obs['x3'][0], param1['sv_max'], param1['a_max'],
                                 param1['v_max'], param1['v_min'])
                     control = np.array([sv, accl])
                 else:
                     control = np.array([steer, vel])
                     
-                print('accl', accl, 'vel', vel, 'start_vel', start_vel, 'x4', obs['x4'][0])
+                # print(step_count, 'accl', accl, 'vel', vel, 'start_vel', start_vel, 'x4', obs['x4'][0], 'x11', obs['x11'][0])
+                # if np.abs(accl) > 0.1:
+                print(step_count, 'accl', accl, 'vel', vel, 'v_combined', v_combined, 'x4', obs['x4'][0], 'x11', obs['x11'][0])
                 # print('sv', sv, 'steer', steer, 'x3', obs['x3'][0])
 
                 pbar.update(1)
@@ -171,10 +177,12 @@ def main():
                     # print(control)
                     
                     if step_count % RESET_STEP == 0:
+                        
                         steering_count = 0
                         steers = get_steers(RESET_STEP * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_PEAK_DENSITY))
-                        vel = np.random.uniform(start_vel, start_vel+VEL_SAMPLE_UP)
-                        _ = warm_up(env, vel, 1000)
+                        vel = start_vel + np.random.uniform(-VEL_SAMPLE_UP/2, VEL_SAMPLE_UP/2)
+                        obs = warm_up(env, vel, 10000)
+                        # print(step_count, 'reset', 'vel', vel, 'x4', obs['x4'][0], 'x11', obs['x11'][0])
                         if len(states) > 0:
                             # print(np.vstack(states).shape)
                             total_controls.append(np.vstack(controls))
@@ -191,20 +199,21 @@ def main():
                     pbar.refresh()
                     steers = get_steers(STEERING_LENGTH * SEGMENT_LENGTH, SEGMENT_LENGTH, int(STEERING_LENGTH/100 * STEERING_PEAK_DENSITY))
                     if DENSITY_CURB != 0: steers = curb_dense_points(steers, DENSITY_CURB)
-                    _ = warm_up(env, vel, 1000)
+                    _ = warm_up(env, vel, 10000)
                     controls = []
                     states = []
                     
                 
                 
-                
+        # print(np.max(total_controls, axis=1), np.min(total_controls, axis=1))
         
         np.save(SAVE_DIR+'states_f{}_v{}.npy'.format(int(np.rint(friction*10)), 
                                                             int(np.rint(start_vel*100))), np.stack(total_states))
         np.save(SAVE_DIR+'controls_f{}_v{}.npy'.format(int(np.rint(friction*10)), 
                                                                 int(np.rint(start_vel*100))), np.stack(total_controls))
 
-        print('Real elapsed time:', time.time() - start)
+        print('Real elapsed time:', time.time() - start, 'states_f{}_v{}.npy'.format(int(np.rint(friction*10)), 
+                                                            int(np.rint(start_vel*100))))
 
 if __name__ == '__main__':
     main()
