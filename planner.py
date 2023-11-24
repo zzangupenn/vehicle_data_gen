@@ -7,7 +7,7 @@ import json
 
 from numba import njit
 
-from pyglet.gl import GL_POINTS
+# from pyglet.gl import GL_POINTS
 PLOT_SCALE = 10.
 import pdb
 import os, sys
@@ -185,25 +185,25 @@ class PurePursuitPlanner:
         self.waypoints = None
         self.drawn_waypoints = []
 
-    def render_waypoints(self, e):
-        """
-        update waypoints being drawn by EnvRenderer
-        """
+    # def render_waypoints(self, e):
+    #     """
+    #     update waypoints being drawn by EnvRenderer
+    #     """
 
-        # points = self.waypoints
+    #     # points = self.waypoints
 
-        points = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
+    #     points = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
 
-        scaled_points = PLOT_SCALE * points
-        # scaled_points = 1. * points # TODO
+    #     scaled_points = PLOT_SCALE * points
+    #     # scaled_points = 1. * points # TODO
 
-        for i in range(points.shape[0]):
-            if len(self.drawn_waypoints) < points.shape[0]:
-                b = e.batch.add(1, GL_POINTS, None, ('v3f/stream', [scaled_points[i, 0], scaled_points[i, 1], 0.]),
-                                ('c3B/stream', [183, 193, 222]))
-                self.drawn_waypoints.append(b)
-            else:
-                self.drawn_waypoints[i].vertices = [scaled_points[i, 0], scaled_points[i, 1], 0.]
+    #     for i in range(points.shape[0]):
+    #         if len(self.drawn_waypoints) < points.shape[0]:
+    #             b = e.batch.add(1, GL_POINTS, None, ('v3f/stream', [scaled_points[i, 0], scaled_points[i, 1], 0.]),
+    #                             ('c3B/stream', [183, 193, 222]))
+    #             self.drawn_waypoints.append(b)
+    #         else:
+    #             self.drawn_waypoints[i].vertices = [scaled_points[i, 0], scaled_points[i, 1], 0.]
 
     def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta, targe_vel=5):
         """
@@ -280,7 +280,7 @@ def pid(speed, steer, current_speed, current_steer, max_sv, max_a, max_v, min_v)
             accl = kp * vel_diff
         else:
             # braking
-            kp = 5.0 * max_a / (-min_v)
+            kp = 10.0 * max_a / (-min_v)
             accl = kp * vel_diff
     # currently backwards
     else:
@@ -292,5 +292,11 @@ def pid(speed, steer, current_speed, current_steer, max_sv, max_a, max_v, min_v)
             # accelerating
             kp = 2.0 * max_a / (-min_v)
             accl = kp * vel_diff
+
+    max_a = 2.
+    if accl > max_a:
+        accl = max_a
+    elif accl < -max_a:
+        accl = -max_a
 
     return accl, sv

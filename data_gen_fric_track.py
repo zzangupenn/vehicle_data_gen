@@ -6,14 +6,15 @@ from argparse import Namespace
 import os, sys
 from planner import PurePursuitPlanner, get_render_callback, pid
 from utils.mb_model_params import param1
+from additional_renderers import *
 
 
-SEGMENT_LENGTH = 10
+SEGMENT_LENGTH = 20
 RENDER = True
 SAVE_DIR = '/home/lucerna/Documents/DATA/tuner_inn/track39/'
 MAP_DIR = './f1tenth_racetracks/'
 ACC_VS_CONTROL = True
-VEL_SAMPLE_UP = 0.3
+VEL_SAMPLE_UP = 1.0
 SAVE_STEP = 210
         
     
@@ -45,11 +46,16 @@ def load_map(MAP_DIR, map_info, conf, scale=1, reverse=False):
     
     return waypoints, conf, init_theta
 
+def state_mb2nf(mb_state):
+    return np.array([mb_state[0], mb_state[1], mb_state[2],
+                    mb_state[3], mb_state[4], mb_state[5],
+                    mb_state[10]])
+
 
 if len(sys.argv) > 1:
     start_vel = float(sys.argv[1])
     # vels = [vel]
-    vels = np.arange(start_vel, start_vel + 0.3, 0.1)
+    vels = np.arange(start_vel, start_vel + 6, 1.0)
 
 def main():
     """
@@ -59,7 +65,7 @@ def main():
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
     
-    frictions = [0.5, 0.65, 0.8]
+    frictions = [0.5]
     # vels = np.arange(8, 9, 1)
     # print('vels', vels)
 
@@ -73,7 +79,7 @@ def main():
             for reverse in range(2):
                 map_info = np.genfromtxt('maps/map_info.txt', delimiter='|', dtype='str')[map_ind][1:]
                 print(map_ind, map_info[0], 'reverse', reverse)
-                waypoints, conf, init_theta = load_map(MAP_DIR, map_info, conf, scale=7, reverse=reverse)
+                waypoints, conf, init_theta = load_map(MAP_DIR, map_info, conf, scale=start_vel-2, reverse=reverse)
                 
                 print('vel', vel)
                 print('friction', friction)
@@ -90,12 +96,15 @@ def main():
                     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext,
                                 num_agents=1, timestep=0.01, model='MB', drive_control_mode='vel',
                                 steering_control_mode='angle')
-                if RENDER: env.add_render_callback(get_render_callback(planner))
+                    
+                map_waypoint_renderer = MapWaypointRenderer(waypoints)
+                renderers = [map_waypoint_renderer]
+                if RENDER: env.add_render_callback(get_render_callback(renderers))
 
                 # # init vector = [x,y,yaw,steering angle, velocity, yaw_rate, beta]
                 obs, step_reward, done, info = env.reset(np.array([[waypoints[0, conf.wpt_xind], 
                                                                     waypoints[0, conf.wpt_yind], 
-                                                                    init_theta, 0.0, 0.0, 0.0, 0.0]]))
+                                                                    init_theta, 0.0, start_vel, 0.0, 0.0]]))
 
                 laptime = 0.0
                 start = time.time()            
@@ -104,7 +113,7 @@ def main():
                 cnt = 0
                 while not done:
                     if cnt % 42 == 0:
-                        target_vel = vel + np.random.uniform(-VEL_SAMPLE_UP, VEL_SAMPLE_UP)
+                        target_vel = vel + np.random.uniform(-VEL_SAMPLE_UP/2, VEL_SAMPLE_UP/2)
                     
                     speed, steer, ind = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], work['tlad'],
                                                 work['vgain'], target_vel)
@@ -123,15 +132,16 @@ def main():
                     for i in range(SEGMENT_LENGTH):
                         obs, rew, done, info = env.step(np.array([[control[0], control[1]]]))
                         step_reward += rew
+                    
 
-                    state = np.array([obs['x3'][0], obs['x4'][0], obs['x6'][0], obs['x11'][0]])
+                    state = obs['state'][0]
                     ## x3 = steering angle of front wheels
                     ## x4 = velocity in x-direction
                     ## x6 = yaw rate
                     ## x11 = velocity in y-direction
                     
                     cnt += 1
-                    states.append(state)
+                    states.append(state[[2, 3, 5, 10]])
                     controls.append(control)
                     
                     if cnt % SAVE_STEP == 0:
@@ -142,14 +152,14 @@ def main():
 
                     laptime += step_reward
                     if RENDER: 
+                        map_waypoint_renderer.update(state[:2])
                         env.render(mode='human_fast')
-                        print('target_vel', target_vel, np.sqrt(obs['x4'][0] ** 2 + obs['x11'][0] ** 2))
-                        print(ind, f'x {obs["x1"][0]:.2f}, y {obs["x2"][0]:.2f}, yaw {obs["x5"][0]:.2f}, yawrate {obs["x6"][0]:.2f}' + \
-                            f', vx {obs["x4"][0]:.2f}, vy {obs["x11"][0]:.2f}, steer {obs["x3"][0]:.2f}')
-
+                        
                 print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time() - start)
-        np.save(SAVE_DIR + 'states_f{}_v{}.npy'.format(int(np.rint(friction*10)), int(np.rint(vels[0]*100))), total_states)
-        np.save(SAVE_DIR + 'controls_f{}_v{}.npy'.format(int(np.rint(friction*10)), int(np.rint(vels[0]*100))), total_controls)
+                print(np.asarray(total_states).shape)
+                print(np.asarray(total_controls).shape)
+            np.save(SAVE_DIR + 'states_f{}_v{}.npy'.format(int(np.rint(friction*10)), int(np.rint(vel*100))), total_states)
+            np.save(SAVE_DIR + 'controls_f{}_v{}.npy'.format(int(np.rint(friction*10)), int(np.rint(vel*100))), total_controls)
 
             
 

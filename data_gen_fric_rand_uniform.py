@@ -11,16 +11,20 @@ import matplotlib.pyplot as plt
 from utils.utils import Logger
 from planner import pid
 from utils.mb_model_params import param1
+from scipy.stats import truncnorm
 
 NOISE = [0, 0, 0] # control_vel, control_steering, state 
 
-EXP_NAME = 'fric3_rand_f8'
-SEGMENT_LENGTH = 10
-STEERING_LENGTH = 21e2 * 3
+EXP_NAME = 'fric3_rand_acc2_t01'
+DT = 0.1
+
+INTEGRATION_DT = 0.002
+SEGMENT_LENGTH = int(np.rint(DT/INTEGRATION_DT))
+STEERING_LENGTH = 21e2 * 4
 RESET_STEP = 210
-VEL_SAMPLE_UP = 0.3
+VEL_SAMPLE_UP = 3.0
 DENSITY_CURB = 0
-STEERING_PEAK_DENSITY = 4
+STEERING_PEAK_DENSITY = 2.5
 RENDER = False
 ACC_VS_CONTROL = True
 # SAVE_DIR = '/home/lucerna/Documents/DATA/tuner/' + EXP_NAME + '/'
@@ -37,7 +41,7 @@ def get_steers(sample_length, segment_length=10, peak_num=200):
     x = np.linspace(0, 1, length)
     y = np.zeros_like(x)
 
-    for _ in range(peak_num):
+    for _ in range(int(peak_num)):
         amplitude = np.random.rand() 
         frequency = np.random.randint(1, peak_num)
         phase = np.random.rand() * 2 * np.pi 
@@ -51,7 +55,10 @@ def get_steers(sample_length, segment_length=10, peak_num=200):
     z = z/y_upper
     z = z*2
     z = z - 1.
-    z = z * 0.5
+    # z = z * 0.8
+    
+    rand_steer = truncnorm.rvs(-4.0, 4.0, size=1)[0] * 0.1
+    z += rand_steer
     z[np.where(z > 0.4)] = 0.4
     z[np.where(z < -0.4)] = -0.4
     return z
@@ -73,10 +80,10 @@ def warm_up(env, vel, warm_up_steps):
     # init vector = [x,y,yaw,steering angle, velocity, yaw_rate, beta]
     
     obs, step_reward, done, info = env.reset(
-        np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]))
+        np.array([[0.0, 0.0, 0.0, 0.0, vel/1.1, 0.0, 0.0]]))
 
     step_count = 0
-    while (np.abs(obs['x4'][0] - vel) > 0.01):
+    while (np.abs(obs['x4'][0] - vel) > 0.5):
         try:
             accel = (vel - obs['x4'][0]) * 0.1
             obs, step_reward, done, info = env.step(np.array([[0.0, accel]]))
@@ -90,7 +97,7 @@ def warm_up(env, vel, warm_up_steps):
 
 
 # frictions = [0.5, 0.8, 1.1]
-frictions = [0.8]
+frictions = [0.5]
 
 if len(sys.argv) > 1:
     start_vel = float(sys.argv[1])
@@ -125,11 +132,11 @@ def main():
         # init vector = [x,y,yaw,steering angle, velocity, yaw_rate, beta]
         if ACC_VS_CONTROL:
             env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext,
-                    num_agents=1, timestep=0.01, model='MB', drive_control_mode='acc',
+                    num_agents=1, timestep=INTEGRATION_DT, model='MB', drive_control_mode='acc',
                     steering_control_mode='vel')
         else:
             env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext,
-                        num_agents=1, timestep=0.01, model='MB', drive_control_mode='vel',
+                        num_agents=1, timestep=INTEGRATION_DT, model='MB', drive_control_mode='vel',
                         steering_control_mode='angle')
         # vel = np.random.uniform(start_vel-VEL_SAMPLE_UP/2, start_vel+VEL_SAMPLE_UP/2)
         vel = start_vel + np.random.uniform(-VEL_SAMPLE_UP/2, VEL_SAMPLE_UP/2)
@@ -154,7 +161,7 @@ def main():
                     
                 # print(step_count, 'accl', accl, 'vel', vel, 'start_vel', start_vel, 'x4', obs['x4'][0], 'x11', obs['x11'][0])
                 # if np.abs(accl) > 0.1:
-                print(step_count, 'accl', accl, 'vel', vel, 'v_combined', v_combined, 'x4', obs['x4'][0], 'x11', obs['x11'][0])
+                # print(step_count, 'accl', accl, 'vel', vel, 'v_combined', v_combined, 'x4', obs['x4'][0], 'x11', obs['x11'][0])
                 # print('sv', sv, 'steer', steer, 'x3', obs['x3'][0])
 
                 pbar.update(1)

@@ -39,3 +39,6 @@
 37|MoscowRaceway/MoscowRaceway_raceline.csv|;|3|1|2|3|5
 38|Zandvoort/Zandvoort_centerline.csv|,|1|0|1|-1|-1
 39|Zandvoort/Zandvoort_raceline.csv|;|3|1|2|3|5
+40|Others/rounded_rectangle_waypoints.csv|;|3|1|2|3|5
+41|DualLaneChange/waypoints/DualLaneChange_mintime.csv|;|3|1|2|3|5
+42|DualLaneChange/waypoints/DualLaneChange_waypoints.csv|;|3|1|2|3|5

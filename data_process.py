@@ -1,31 +1,25 @@
-# standard imports
-import torch
-import torch.nn as nn
-from torch.nn.functional import kl_div
-# from sklearn.datasets import make_moons, make_circles, make_blobs
 import matplotlib.pyplot as plt
-from torch.distributions import MultivariateNormal
 import numpy as np
 from utils.utils import DataProcessor, ConfigJSON, Logger
-# from utils.torch_utils import PositionalEncoding_torch
 
 TEST = 0
-TRAIN_DATADIR = '/workspace/data/tuner/fric3_rand_f8'
+# TRAIN_DATADIR = '/workspace/data/tuner/fric3_rand_acc2_t02'
+TRAIN_DATADIR = '/home/lucerna/Documents/DATA/tuner_inn/track39'
 if TEST:
     DATADIR = TRAIN_DATADIR + '_test/'
 else:
     DATADIR = TRAIN_DATADIR + '/'
 TRAIN_SEGMENT = 2
-TIME_INTERVAL = 0.1
-SAVE_NAME = '_f8'
+TIME_INTERVAL = 0.2
+SAVE_NAME = '_f5'
 
 logger = Logger(DATADIR, SAVE_NAME)
 logger.write_file(__file__)
 
 # vlist = np.hstack([np.arange(0, 1, 0.1) + i for i in np.arange(5, 9)])
-vlist = np.arange(8.0, 18.0, 0.05)
+vlist = np.arange(10.0, 15.0, 1)
 # flist = [0.5, 0.8, 1.1]
-flist = [0.8]
+flist = [0.5]
 dp = DataProcessor()
 c = ConfigJSON()
 all_friction_states = []
@@ -64,10 +58,14 @@ for ind in range(4):
 
 dynamics = []
 for ind, friction_ in enumerate(flist):
-    states = np.vstack(all_friction_states[ind])
-    states = np.vstack([states[i:i+2][None, :] for i in range(0, len(states)-2+1, 2)])
-    dynamics.append((states[:, 1, 1:] - states[:, 0, 1:]) / TIME_INTERVAL)
-
+    states_fric = all_friction_states[ind]
+    # controls_fric = all_friction_control[ind]
+    for segment_ind in range(states_fric.shape[0]):
+        states = states_fric[segment_ind]
+        # controls = controls_fric[segment_ind]
+        states = np.vstack([states[i:i+2][None, :] for i in range(0, len(states)-2+1, 2)])
+        dynamics.append((states[:, 1, 1:] - states[:, 0, 1:]) / TIME_INTERVAL)
+        
 dynamics = np.vstack(dynamics)
 for ind in range(3):
     _, param = dp.data_normalize(dynamics[:, ind])
@@ -120,14 +118,14 @@ for ind, friction_ in enumerate(flist):
         dynamics = (states[:, 1:, 1:] - states[:, :-1, 1:]) / TIME_INTERVAL
         label = [ind] * dynamics.shape[0]
         
-        for ind2 in range(4):
-            states[:, :, ind2] = dp.runtime_normalize(states[:, :, ind2], normalization_param[ind2])
+        # for ind2 in range(4):
+        #     states[:, :, ind2] = dp.runtime_normalize(states[:, :, ind2], normalization_param[ind2])
         
-        for ind2 in range(4, 7):
-            # print(dynamics[0, 0, ind2-4])
-            dynamics[:, :, ind2-4] = dp.runtime_normalize(dynamics[:, :, ind2-4], normalization_param[ind2])
-        for ind2 in range(7, 9):
-            controls[:, :, ind2-7] = dp.runtime_normalize(controls[:, :, ind2-7], normalization_param[ind2])
+        # for ind2 in range(4, 7):
+        #     # print(dynamics[0, 0, ind2-4])
+        #     dynamics[:, :, ind2-4] = dp.runtime_normalize(dynamics[:, :, ind2-4], normalization_param[ind2])
+        # for ind2 in range(7, 9):
+        #     controls[:, :, ind2-7] = dp.runtime_normalize(controls[:, :, ind2-7], normalization_param[ind2])
         
         
         # print('dynamics', dynamics.shape)
@@ -149,6 +147,7 @@ train_dynamics_fric = np.array(train_dynamics_fric)
 train_labels_fric = np.array(train_labels_fric)
     
 print('train_states', train_states_fric.shape)
+print('train_controls_fric', train_controls_fric.shape)
 print('train_dynamics_fric', train_dynamics_fric.shape)
 print('train_labels', train_labels_fric.shape)
 
