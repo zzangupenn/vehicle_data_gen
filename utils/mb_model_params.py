@@ -1,4 +1,15 @@
-param1 = {
+params_f1tenth = {'mu': 1.0489, 'C_Sf': 4.718, 'C_Sr': 5.4562, 'lf': 0.15875, 'lr': 0.17145, 'h': 0.074,
+                               'm': 3.74, 'I': 0.04712, 's_min': -0.4189, 's_max': 0.4189, 'sv_min': -3.2,
+                               'sv_max': 3.2, 'v_switch': 7.319, 'a_max': 9.51, 'v_min': -5.0, 'v_max': 20.0,
+                               'width': 0.31, 'length': 0.58}  # F1/10 car
+
+
+params_real = {'mu': 1.0489, 'C_Sf': 20.898, 'C_Sr': 20.898, 'lf': 0.88392, 'lr': 1.50876, 'h': 0.59436,
+                               'm': 1225.887, 'I': 1538.853371, 's_min': -0.910, 's_max': 0.910, 'sv_min': -0.4,
+                               'sv_max': 0.4, 'v_switch': 4.755, 'a_max': 3.5, 'v_min': -13.9, 'v_max': 99,
+                               'width': 1.674, 'length': 4.298} # real car
+
+params_real_mb = {
         # vehicle body dimensions
         'length': 4.298,  # vehicle length [m]
         'width': 1.674,  # vehicle width [m]
@@ -11,7 +22,7 @@ param1 = {
 
         # longitudinal constraints
         'v_min': -13.9,  # minimum velocity [m/s]
-        'v_max': 45.8,  # minimum velocity [m/s]
+        'v_max': 99,  # minimum velocity [m/s]
         'v_switch': 4.755,  # switching velocity [m/s]
         'a_max': 3.5,  # maximum absolute acceleration [m/s^2]
 
@@ -52,7 +63,6 @@ param1 = {
         'h_rar': 0.0,  # height of roll axis above ground (rear) [m]  HRAR
 
         'h_s': 0.59436,  # M_s center of gravity above ground [m]  HS
-
         'I_uf': 32.539630,  # moment of inertia for unsprung mass about x-axis (front) [kg m^2]  IXUF
         'I_ur': 32.539630,  # moment of inertia for unsprung mass about x-axis (rear) [kg m^2]  IXUR
         'I_y_w': 1.7,  # wheel inertia, from internet forum for 235/65 R 17 [kg m^2]
@@ -106,4 +116,9 @@ param1 = {
         'tire_r_vy4': 12.12,  # Variation of Svyk/Muy*Fz with alpha
         'tire_r_vy5': 1.9,  # Variation of Svyk/Muy*Fz with kappa
         'tire_r_vy6': -10.704,  # Variation of Svyk/Muy*Fz with atan(kappa)
+        
+        'h': 0.59436, 
+        'I': 1538.853371,  
+        'C_Sf': 20.898, 
+        'C_Sr': 20.898,
     }

@@ -293,10 +293,10 @@ def pid(speed, steer, current_speed, current_steer, max_sv, max_a, max_v, min_v)
             kp = 2.0 * max_a / (-min_v)
             accl = kp * vel_diff
 
-    max_a = 2.
-    if accl > max_a:
-        accl = max_a
-    elif accl < -max_a:
-        accl = -max_a
+    # max_a = 2.
+    # if accl > max_a:
+    #     accl = max_a
+    # elif accl < -max_a:
+    #     accl = -max_a
 
     return accl, sv

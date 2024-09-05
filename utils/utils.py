@@ -2,45 +2,217 @@ import json
 import numpy as np
 import yaml
 import os
+from pathlib import Path
 
 
-BN_MOMENTUM = 0.1
+BN_MOMENTUM = 0.1    
 
+def npprint_suppress():
+    np.set_printoptions(suppress=True, precision=10)
+    
+class utilitySuite:
+    def __init__(self, config) -> None:
+        self.timer = Timer()
+        self.dp = DataProcessor()
+        self.colorpal = colorPalette()
+        self.plt = pltUtils()
+        self.kmonitor = keyMonitor(enable=config.kmonitor_enable)
+        self.log = Logger(config.save_dir, config.exp_name)
+        self.rec = ListDict()
+
+class keyMonitor:
+    def __init__(self, enable=True) -> None:
+        os.environ['KEY_OPTION_ZZR'] = '0'
+        if enable:
+            import pynput.keyboard as keyboard
+            self.keyboard = keyboard
+            
+            def show(key):
+                if "{0}".format(key) == "Key.alt_r":
+                    if os.environ['KEY_OPTION_ZZR'] == '0':
+                        os.environ['KEY_OPTION_ZZR'] = '1'
+                    else:
+                        os.environ['KEY_OPTION_ZZR'] = '0'
+                    print('[keyMonitor]:' + os.environ['KEY_OPTION_ZZR'])
+                elif "{0}".format(key) in list(map(lambda x: "'"+str(x)+"'", range(10))):
+                    os.environ['KEY_OPTION_ZZR'] = "{0}".format(key)[1]
+                    print('[keyMonitor]:' + os.environ['KEY_OPTION_ZZR'])
+                        
+            listener = keyboard.Listener(on_press = show)    
+            listener.start()
+        
+    def option(self):
+        return os.environ['KEY_OPTION_ZZR']
+    
+class pltUtils:
+    def __init__(self) -> None:
+        import matplotlib.pyplot as plt
+        from matplotlib.gridspec import GridSpec
+        self.plt = plt
+        self.GridSpec = GridSpec
+        self.win_closed = False
+        
+    def get_fig(self, grid=[1, 1], figsize=[8, 6], dpi=100, gridline=False):
+        fig = self.plt.figure(figsize=figsize, dpi=dpi)
+        self.fig = fig
+        self.fig.tight_layout()
+        self.gs = self.GridSpec(grid[0], grid[1])
+        self.axs = []
+        for ind in range(np.prod(grid)):
+            self.axs.append(fig.add_subplot(self.gs[ind]))
+        if gridline:
+            for ind in range(len(self.axs)):
+                self.grid(ind)
+            
+        def handle_close(evt):
+            self.win_closed = True
+        self.fig.canvas.mpl_connect('close_event', handle_close)
+        return self.axs
+    
+    def equal(self, ax_num):
+        self.axs[ax_num].axis('equal')
+        
+    def background(self, color, ax_num):
+        self.axs[ax_num].set_facecolor(color)
+    
+    def box(self, ax_num):
+        self.axs[ax_num].set_aspect('equal', 'box')
+    
+    def grid(self, ax_num):
+        self.axs[ax_num].grid(which='both', axis='both')
+    
+    def hide_xy(self, ax_num):
+        self.axs[ax_num].get_xaxis().set_visible(False)
+        self.axs[ax_num].get_yaxis().set_visible(False)
+
+    def colorbar(self, ax_num, cmap='viridis'):
+        if len(self.axs[ax_num].collections) > 0:
+            self.plt.colorbar(self.axs[ax_num].collections[0], ax=self.axs[ax_num], cmap=cmap)
+        elif len(self.axs[ax_num].images) > 0:
+            self.plt.colorbar(self.axs[ax_num].images[0], ax=self.axs[ax_num], cmap=cmap)
+            
+    def y(self, ax_num, limit):
+        self.axs[ax_num].set_ylim(limit)
+    
+    def x(self, ax_num, limit):
+        self.axs[ax_num].set_xlim(limit)
+        
+    def show(self):
+        self.plt.show()
+    
+    def show_pause(self):
+        self.plt.draw()
+        while self.plt.waitforbuttonpress(0.2) is None:
+            if self.win_closed:
+                break
+        self.plt.close(self.fig)
+        self.win_closed = False
+    
+    def save_fig(self, filename):
+        self.plt.savefig(filename, bbox_inches='tight')
+        
+    def close_all(self):
+        self.plt.close('all')
+        
+        
+class ListDict:
+    def __init__(self) -> None:
+        pass
+
+    def init(self, *keys):
+        for key in keys:
+            setattr(self, key, []) 
+    
+    def save(self, *keys, save_dir=''):
+        for key in keys:
+            np.savez(save_dir + key, *getattr(self, key))
+            
+    def load(self, *keys, save_dir=''):
+        for key in keys:
+            setattr(self, key, list(np.load(save_dir + key + '.npz', allow_pickle=True).values()))
+    
+class Timer:
+    def __init__(self, enable=True) -> None:
+        self.enable = enable
+        self.times = {}
+        import time
+        self.time = time
+        
+    def tic(self, time_name=None):
+        if self.enable:
+            if time_name is None:
+                time_name = str(len(list(self.times.keys())))
+            self.times[time_name] = self.time.time()
+            
+    def toc(self, name='', time_name=None, Hz=False, ret=False, show=True):
+        if self.enable:
+            if time_name is None:
+                time_name = str(len(list(self.times.keys())) - 1)
+            if Hz: 
+                ret = 1/(self.time.time() - self.times[time_name])
+            else:
+                ret = self.time.time() - self.times[time_name]
+            if Hz and show: print(name, ret, 'Hz')
+            elif show: print(name, ret, 's')
+            if ret: return ret
+    
+    def toctic(self, name='', time_name=None, Hz=False, ret=False, show=True, time_name2=None):
+        self.toc(name, time_name, Hz, ret, show)
+        self.tic(time_name2)
+    
+    def ding(self):
+        if self.enable:
+            print()
+
+
+class colorPalette:
+    def __init__(self, colorset=None) -> None:
+        self.colorset = colorset
+        if colorset is None:
+            self.colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999']
+        else:
+            import seaborn as sns
+            self.sns = sns
+            self.colors = self.sns.color_palette(self.colorset).as_hex()
+        
+    def hex2rgb(self, hex):
+        return [int(hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)]
+        
+    def rgb(self, color_ind):
+        if isinstance(color_ind, str):
+            if self.colorset == "Set1" or self.colorset == None:
+                color_ind = ['r', 'b', 'g', 'p', 'o', 'y', 'br', 'pi'].index(color_ind)
+        return self.hex2rgb(self.colors[color_ind])
+    
+    
+    
 class Logger:
     def __init__(self, save_dir, experiment_name):
         import datetime
+        from io import StringIO
+        self.s = StringIO()
         self.save_dir = save_dir
         self.experiment_name = experiment_name
         print(self.experiment_name)
         
-        if not os.path.exists(save_dir):
-            os.mkdir(save_dir)
-        with open(save_dir + experiment_name + '.txt', "a") as tgt:
-            tgt.writelines(experiment_name + ' ' + str(datetime.datetime.now()) + '\n')
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        with open(self.save_dir + experiment_name + '.txt', "a") as tgt:
+            tgt.writelines('\n' + experiment_name + ' ' + str(datetime.datetime.now()) + '\n')
             
     def write_file(self, file):
         with open(file, "r") as src:
             with open(self.save_dir + self.experiment_name + '.py', "w") as tgt:
                 tgt.write(src.read())
     
-    def log_line(self, line):
+    def line(self, *line, print_line=True):
+        if print_line: print(*line)
+        print(*line, file = self.s)
         with open(self.save_dir + self.experiment_name + '.txt', "a") as tgt:
-            tgt.writelines(line + '\n')
-
-def find_range(data):
-    range_min = []
-    range_max = []
-    for k in range(data.shape[1]):
-        range_min.append(np.min(data[:, k]))
-        range_max.append(np.max(data[:, k]))
-    return np.array([range_min, range_max])
-
-def find_larger_range(range1, range2):
-    range_ret = range1.copy()
-    for k in range(range_ret.shape[1]):
-        range_ret[0, k] = np.min([range1[0, k], range2[0, k]])
-        range_ret[1, k] = np.max([range1[1, k], range2[1, k]])
-    return range_ret
+            tgt.writelines(self.s.getvalue())
+        self.s.truncate(0)
+        self.s.seek(0)
+            
 
 class open3dUtils:
     def __init__(self):
@@ -113,11 +285,60 @@ class ConfigJSON():
     def save_file(self, filename):
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(self.d, f, ensure_ascii=False, indent=4)
+
+class ConfigYAML():
+    """
+    Config class for yaml file
+    Able to load and save yaml file to and from python object
+    """
+    def __init__(self) -> None:
+        pass
+    
+    def load_file(self, filename):
+        d = yaml.safe_load(Path(filename).read_text())
+        for key in d: 
+            setattr(self, key, d[key]) 
+    
+    def save_file(self, filename):
+        d = vars(self)
+        class_d = vars(self.__class__)
+        d_out = {}
+        for key in list(class_d.keys()):
+            if not key.startswith('__'):
+                if isinstance(class_d[key], np.ndarray):
+                    d_out[key] = class_d[key].tolist()
+                else:
+                    d_out[key] = class_d[key]
+        for key in list(d.keys()):
+            if not key.startswith('__'):
+                if isinstance(d[key], np.ndarray):
+                    d_out[key] = d[key].tolist()
+                else:
+                    d_out[key] = d[key]
+        with open(filename, 'w+') as ff:
+            yaml.dump_all([d_out], ff)
             
             
 class DataProcessor():
     def __init__(self) -> None:
         pass
+    
+    def find_range(self, data):
+        if len(data.shape) == 1:
+            return np.array([np.min(data), np.max(data)])
+        range_min = []
+        range_max = []
+        for k in range(data.shape[1]):
+            range_min.append(np.min(data[:, k]))
+            range_max.append(np.max(data[:, k]))
+        return np.array([range_min, range_max])
+
+    def find_larger_range(self, range1, range2):
+        range_ret = range1.copy()
+        for k in range(range_ret.shape[1]):
+            range_ret[0, k] = np.min([range1[0, k], range2[0, k]])
+            range_ret[1, k] = np.max([range1[1, k], range2[1, k]])
+        return range_ret
     
     def two_pi_warp(self, angles):
         twp_pi = 2 * np.pi
@@ -142,7 +363,6 @@ class DataProcessor():
     
     def de_normalize(self, data, params):
         return data * params[0] + params[1]
-    
 
 class DrivableCritic():
     def __init__(self, yaml_dir, yaml_filename):
