@@ -11,13 +11,17 @@ def npprint_suppress():
     np.set_printoptions(suppress=True, precision=10)
     
 class utilitySuite:
-    def __init__(self, config) -> None:
+    def __init__(self, config=None) -> None:
+        if config is None:
+            config = ConfigYAML()
+            config.kmonitor_enable = 0
+        else:
+            self.log = Logger(config.save_dir, config.exp_name)
         self.timer = Timer()
         self.dp = DataProcessor()
         self.colorpal = colorPalette()
         self.plt = pltUtils()
         self.kmonitor = keyMonitor(enable=config.kmonitor_enable)
-        self.log = Logger(config.save_dir, config.exp_name)
         self.rec = ListDict()
 
 class keyMonitor:
@@ -304,13 +308,17 @@ class ConfigYAML():
         class_d = vars(self.__class__)
         d_out = {}
         for key in list(class_d.keys()):
-            if not key.startswith('__'):
+            if not (key.startswith('__') or \
+                    key.startswith('load_file') or \
+                    key.startswith('save_file')):
                 if isinstance(class_d[key], np.ndarray):
                     d_out[key] = class_d[key].tolist()
                 else:
                     d_out[key] = class_d[key]
         for key in list(d.keys()):
-            if not key.startswith('__'):
+            if not (key.startswith('__') or \
+                    key.startswith('load_file') or \
+                    key.startswith('save_file')):
                 if isinstance(d[key], np.ndarray):
                     d_out[key] = d[key].tolist()
                 else:
@@ -342,7 +350,7 @@ class DataProcessor():
     
     def two_pi_warp(self, angles):
         twp_pi = 2 * np.pi
-        return (angles + twp_pi) % (twp_pi)
+        return float((angles + twp_pi) % (twp_pi))
         # twp_pi = 2 * np.pi
         # if angle > twp_pi:
         #     return angle - twp_pi
@@ -356,13 +364,13 @@ class DataProcessor():
         data = data - data_min
         data_max = np.max(data)
         data = data / data_max
-        return data, [data_max, data_min]
+        return data, [float(data_max), float(data_min)]
     
     def runtime_normalize(self, data, params):
-        return (data - params[1]) / params[0]
+        return float((data - params[1]) / params[0])
     
     def de_normalize(self, data, params):
-        return data * params[0] + params[1]
+        return float(data * params[0] + params[1])
 
 class DrivableCritic():
     def __init__(self, yaml_dir, yaml_filename):

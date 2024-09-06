@@ -1,54 +1,52 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from utils.utils import DataProcessor, ConfigJSON, Logger
+from utils.utils import DataProcessor, ConfigYAML, Logger
 
 TEST = 0
-# TRAIN_DATADIR = '/workspace/data/tuner/fric3_rand_acc2_t02'
-TRAIN_DATADIR = '/home/lucerna/Documents/DATA/tuner_inn/track39'
+TRAIN_DATADIR = '/media/lucerna/SHARED/DATA/kine_rand_uniform'
+# TRAIN_DATADIR = '/home/lucerna/Documents/DATA/tuner_inn/track39'
 if TEST:
     DATADIR = TRAIN_DATADIR + '_test/'
 else:
     DATADIR = TRAIN_DATADIR + '/'
 TRAIN_SEGMENT = 2
-TIME_INTERVAL = 0.2
-SAVE_NAME = '_f5'
+TIME_INTERVAL = 0.1
+SAVE_NAME = ''
 
 logger = Logger(DATADIR, SAVE_NAME)
 logger.write_file(__file__)
 
 # vlist = np.hstack([np.arange(0, 1, 0.1) + i for i in np.arange(5, 9)])
-vlist = np.arange(10.0, 15.0, 1)
+vlist = np.arange(10.0, 12.0, 1)
 # flist = [0.5, 0.8, 1.1]
-flist = [0.5]
+flist = [1.0]
+print('vlist', vlist)
 dp = DataProcessor()
-c = ConfigJSON()
+
 all_friction_states = []
 all_friction_control = []
 for ind, friction_ in enumerate(flist):
     total_states = []
     total_controls = []
     for vel in vlist:
-        filename = 'states_f{}_v{}.npy'.format(int(friction_*10),
+        filename = 'states_f{}_v{}.npy'.format(int(np.rint(friction_*10)),
                                                        int(np.rint(vel*100)))
-        controls_filename = 'controls_f{}_v{}.npy'.format(int(friction_*10), 
+        controls_filename = 'controls_f{}_v{}.npy'.format(int(np.rint(friction_*10)), 
                                                                   int(np.rint(vel*100)))
-        
-        # filename = '/states_f{}_v{}_step{}.npy'.format(int(friction_*10),
-        #                                                int(np.rint(vel*100)),
-        #                                                 # int(np.round(vel, decimals=2)*100),
-        #                                                210)
-        # controls_filename = '/controls_f{}_v{}_step{}.npy'.format(int(friction_*10), 
-        #                                                           int(np.rint(vel*100)),
-        #                                                         #   int(np.round(vel, decimals=2)*100),
-        #                                                           210)
         
         states = np.load(DATADIR + filename)
         controls = np.load(DATADIR + controls_filename)
-        total_states.append(states[:, :])
-        total_controls.append(controls[:, :])
+        total_states.append(states)
+        total_controls.append(controls)
 
     all_friction_states.append(np.vstack(total_states))
     all_friction_control.append(np.vstack(total_controls))
+    # all_friction_states.append(total_states)
+    # all_friction_control.append(total_controls)
+
+all_friction_control = np.asarray(all_friction_control)
+all_friction_states = np.asarray(all_friction_states)[..., (2, 3, 5, 6)]
+print('all_friction_states', all_friction_states.shape, np.isnan(all_friction_states).sum(), np.isinf(all_friction_states).sum())
 
 ## normalization
 normalization_param = []
@@ -64,8 +62,11 @@ for ind, friction_ in enumerate(flist):
         states = states_fric[segment_ind]
         # controls = controls_fric[segment_ind]
         states = np.vstack([states[i:i+2][None, :] for i in range(0, len(states)-2+1, 2)])
-        dynamics.append((states[:, 1, 1:] - states[:, 0, 1:]) / TIME_INTERVAL)
-        
+        dynamics.append((states[:, 1, :] - states[:, 0, :]) / TIME_INTERVAL)
+dynamics = np.asarray(dynamics)
+print('dynamics', dynamics.shape, np.isnan(dynamics).sum(), np.isinf(dynamics).sum())
+
+
 dynamics = np.vstack(dynamics)
 for ind in range(3):
     _, param = dp.data_normalize(dynamics[:, ind])
@@ -74,10 +75,13 @@ for ind in range(3):
 for ind in range(2):
     _, param = dp.data_normalize(np.vstack(np.vstack(all_friction_control))[:, ind])
     normalization_param.append(param)
-print(normalization_param)
-    
-c.d['normalization_param'] = normalization_param
-c.save_file(DATADIR + 'config' + SAVE_NAME + '.json')
+print('normalization_param', np.array(normalization_param).shape, 
+      np.isnan(np.array(normalization_param)).sum(), 
+      np.isinf(np.array(normalization_param)).sum())
+
+c = ConfigYAML()
+c.normalization_param = normalization_param
+c.save_file(DATADIR + 'config' + SAVE_NAME + '.yaml')
 
 # plt.plot(np.arange(dynamics.shape[0]), dynamics[:, 0], '.', markersize=1)
 # plt.show()
@@ -90,15 +94,14 @@ c.save_file(DATADIR + 'config' + SAVE_NAME + '.json')
 # c.load_file(TRAIN_DATADIR + '/config.json')
 
 if TEST:
-    c = ConfigJSON()
-    c.load_file(TRAIN_DATADIR + '/config' + SAVE_NAME + '.json')
-    normalization_param = c.d['normalization_param']
+    c = ConfigYAML()
+    # c.normalization_param = normalization_param
+    c.save_file(DATADIR + 'config' + SAVE_NAME + '.yaml')
 
 train_states_fric = []
 train_controls_fric = []
 train_dynamics_fric = []
 train_labels_fric = []
-# normalization_param[0] = [2, -1]
 for ind, friction_ in enumerate(flist):
     states_fric = all_friction_states[ind]
     controls_fric = all_friction_control[ind]
@@ -115,7 +118,7 @@ for ind, friction_ in enumerate(flist):
         
         states = np.vstack([states[i:i+TRAIN_SEGMENT][None, :] for i in range(1, len(states)-TRAIN_SEGMENT+1, TRAIN_SEGMENT)])
         controls = np.vstack([controls[i:i+TRAIN_SEGMENT][None, :] for i in range(1, len(controls)-TRAIN_SEGMENT+1, TRAIN_SEGMENT)])
-        dynamics = (states[:, 1:, 1:] - states[:, :-1, 1:]) / TIME_INTERVAL
+        dynamics = (states[:, 1:, :] - states[:, :-1, :]) / TIME_INTERVAL
         label = [ind] * dynamics.shape[0]
         
         # for ind2 in range(4):

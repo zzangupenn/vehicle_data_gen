@@ -12,6 +12,7 @@ from utils.utils import Logger
 from planner import pid
 from utils.mb_model_params import params_real
 from scipy.stats import truncnorm
+from utils.utils import utilitySuite
 
 NOISE = [0, 0, 0] # control_vel, control_steering, state 
 
@@ -24,7 +25,7 @@ RESET_STEP = 210
 VEL_SAMPLE_UP = 3.0
 DENSITY_CURB = 0
 STEERING_PEAK_DENSITY = 1
-RENDER = 1
+RENDER = 0
 ACC_VS_CONTROL = True
 SAVE_DIR = '/media/lucerna/SHARED/DATA/' + EXP_NAME + '/'
 PEAK_NUM = 10
@@ -107,6 +108,7 @@ def main():
     """
     main entry point
     """
+    us = utilitySuite()
     logger = Logger(SAVE_DIR, EXP_NAME)
     logger.write_file(__file__)
     
@@ -173,17 +175,11 @@ def main():
                     obs, rew, done, info = env.step(np.array([[control[0] + np.random.normal(scale=NOISE[0]),
                                                                 control[1] + np.random.normal(scale=NOISE[1])]]))
                         
-                    if RENDER: env.render(mode='human_fast')
-                    # state = np.array([obs['x3'][0], obs['x4'][0], obs['x6'][0], obs['x11'][0]])
-                    ## x3 = steering angle of front wheels
-                    ## x4 = velocity in x-direction
-                    ## x6 = yaw rate
-                    ## x11 = velocity in y-direction
-                    
-                    state_st_0 = np.asarray(obs['state'][0])
-                    state = np.array([state_st_0[2], state_st_0[3], state_st_0[5], state_st_0[6]])
+                    if RENDER: env.render(mode='human_fast')                    
+                    state_st_1 = np.asarray(obs['state'][0])
+
                     # control = np.array([steer, vel])
-                    states.append(state + np.random.normal(scale=NOISE[2], size=state.shape))
+                    states.append(state_st_1 + np.random.normal(scale=NOISE[2], size=state_st_1.shape))
                     controls.append(control)
                     
                     if step_count % RESET_STEP == 0:
@@ -192,9 +188,7 @@ def main():
                         steers = get_steers(RESET_STEP, params_real, peak_num=PEAK_NUM)
                         vel = start_vel + np.random.uniform(-VEL_SAMPLE_UP/2, VEL_SAMPLE_UP/2)
                         obs, env = warm_up(env, vel, 10000)
-                        # print(step_count, 'reset', 'vel', vel, 'x4', obs['x4'][0], 'x11', obs['x11'][0])
                         if len(states) > 0:
-                            # print(np.vstack(states).shape)
                             total_controls.append(np.vstack(controls))
                             total_states.append(np.vstack(states))
                             controls = []
@@ -213,20 +207,20 @@ def main():
                     controls = []
                     states = []
                     
-                
-                
-        # print(np.max(total_controls, axis=1), np.min(total_controls, axis=1))
-        print(np.concatenate(total_controls, axis=0).shape, np.concatenate(total_states, axis=0).shape)
+            
+        total_controls = np.asarray(total_controls)
+        total_states = np.asarray(total_states)    
+        print(total_controls.shape, total_states.shape)
         np.save(SAVE_DIR+'states_f{}_v{}.npy'.format(int(np.rint(friction*10)), 
-                                                            int(np.rint(start_vel*100))), np.stack(total_states))
+                                                            int(np.rint(start_vel*100))), total_states)
         np.save(SAVE_DIR+'controls_f{}_v{}.npy'.format(int(np.rint(friction*10)), 
-                                                                int(np.rint(start_vel*100))), np.stack(total_controls))
+                                                                int(np.rint(start_vel*100))), total_controls)
         
-        plt.plot(np.arange(np.concatenate(total_controls, axis=0).shape[0]), np.concatenate(total_controls, axis=0)[:, 0], '.')
-        plt.show()
         
-        plt.plot(np.arange(np.concatenate(total_controls, axis=0).shape[0]), np.concatenate(total_controls, axis=0)[:, 1], '.')
-        plt.show()
+        axs = us.plt.get_fig([4, 1])
+        for ind in range(4):
+            axs[ind].plot(np.arange(np.concatenate(total_states, axis=0).shape[0]), np.concatenate(total_states, axis=0)[:, ind], '.')        
+        us.plt.show_pause()
         
         print('Real elapsed time:', time.time() - start, 'states_f{}_v{}.npy'.format(int(np.rint(friction*10)), 
                                                             int(np.rint(start_vel*100))))
