@@ -3,7 +3,7 @@ import numpy as np
 from utils.utils import DataProcessor, ConfigYAML, Logger
 
 TEST = 0
-TRAIN_DATADIR = '/media/lucerna/SHARED/DATA/kine_rand_uniform'
+TRAIN_DATADIR = '/media/lucerna/DATA/kine_rand_uniform'
 # TRAIN_DATADIR = '/home/lucerna/Documents/DATA/tuner_inn/track39'
 if TEST:
     DATADIR = TRAIN_DATADIR + '_test/'
@@ -17,7 +17,7 @@ logger = Logger(DATADIR, SAVE_NAME)
 logger.write_file(__file__)
 
 # vlist = np.hstack([np.arange(0, 1, 0.1) + i for i in np.arange(5, 9)])
-vlist = np.arange(10.0, 12.0, 1)
+vlist = np.arange(5.0, 21.0, 1)
 # flist = [0.5, 0.8, 1.1]
 flist = [1.0]
 print('vlist', vlist)
@@ -68,7 +68,7 @@ print('dynamics', dynamics.shape, np.isnan(dynamics).sum(), np.isinf(dynamics).s
 
 
 dynamics = np.vstack(dynamics)
-for ind in range(3):
+for ind in range(4):
     _, param = dp.data_normalize(dynamics[:, ind])
     normalization_param.append(param)
     
@@ -93,11 +93,6 @@ c.save_file(DATADIR + 'config' + SAVE_NAME + '.yaml')
 # c = ConfigJSON()
 # c.load_file(TRAIN_DATADIR + '/config.json')
 
-if TEST:
-    c = ConfigYAML()
-    # c.normalization_param = normalization_param
-    c.save_file(DATADIR + 'config' + SAVE_NAME + '.yaml')
-
 train_states_fric = []
 train_controls_fric = []
 train_dynamics_fric = []
@@ -119,6 +114,7 @@ for ind, friction_ in enumerate(flist):
         states = np.vstack([states[i:i+TRAIN_SEGMENT][None, :] for i in range(1, len(states)-TRAIN_SEGMENT+1, TRAIN_SEGMENT)])
         controls = np.vstack([controls[i:i+TRAIN_SEGMENT][None, :] for i in range(1, len(controls)-TRAIN_SEGMENT+1, TRAIN_SEGMENT)])
         dynamics = (states[:, 1:, :] - states[:, :-1, :]) / TIME_INTERVAL
+        print(np.sum(dynamics * 0.1 + states[:, 0, :] - states[:, 1, :]))
         label = [ind] * dynamics.shape[0]
         
         # for ind2 in range(4):
@@ -135,7 +131,7 @@ for ind, friction_ in enumerate(flist):
         # print('states', states.shape)
         
         train_states.append(states)
-        train_controls.append(controls)
+        train_controls.append(controls[..., 0:1, :])
         train_dynamics.append(dynamics)
         train_labels.append(label)
             
