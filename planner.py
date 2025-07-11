@@ -1,6 +1,6 @@
 import time
 import yaml
-import gym
+# import gym
 import numpy as np
 from argparse import Namespace
 import json

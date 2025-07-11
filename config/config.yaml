@@ -1,0 +1,62 @@
+experiment:
+  name: "dyna_data_new_gym"
+  save_dir: "/media/lucerna/DATA/dyna_data_new_gym/"
+  render: false
+  plot: false
+  acc_vs_control: true
+
+simulation:
+  gym_model: "dynamic_ST"
+  integration_dt: 0.1
+  steering_length: 10000
+  reset_step: 250
+  vel_sample_up: 3.0
+  density_curb: 0
+  steering_peak_density: 1
+  peak_num: 10
+  noise:
+    - 0
+    - 0
+    - 0
+
+environment:
+  map: "example_map"
+  map_scale: 1.0
+  seed: 12345
+  num_agents: 1
+  timestep: 0.1
+  integrator_timestep: 0.1
+  ego_idx: 0
+  max_laps: "inf"
+  integrator: "rk4"
+  model: "st"
+  control_input: ["accl", "steering_speed"]
+  observation_config:
+    type: "direct"
+  reset_config:
+    type: null
+  enable_rendering: false
+  enable_scan: false
+  lidar:
+    fov: 4.712389
+    num_beams: 1080
+    range: 30.0
+    noise_std: 0.01
+  steer_delay_buffer_size: 0
+  compute_frenet: true
+  collision_check_method: "bounding_box"
+  loop_counting_method: "frenet_based"
+
+vehicle_params:
+  tire_p_dy1: 1.0  # mu_y
+  tire_p_dx1: 1.0  # mu_x
+
+frictions:
+  - 1.0
+  # - 0.8
+  # - 0.6
+  # - 0.4
+
+start_velocity:
+  default: 8.0
+  range: [-1.5, 1.5]  # Adjusted around the default velocity

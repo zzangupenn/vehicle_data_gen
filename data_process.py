@@ -1,10 +1,15 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from utils.utils import DataProcessor, ConfigYAML, Logger
+import dotenv
+import os
+
+dotenv.load_dotenv()  # automatically loads from .env in current dir
+# os.getenv("MY_WS_HOME")
 
 TEST = 0
-TRAIN_DATADIR = '/media/lucerna/DATA/kine_rand_uniform'
-# TRAIN_DATADIR = '/home/lucerna/Documents/DATA/tuner_inn/track39'
+# TRAIN_DATADIR = f'{os.getenv("MY_WS_HOME")}data/kine_rand_uniform'
+TRAIN_DATADIR = '/media/lucerna/DATA/dyna_data_new_gym/'
 if TEST:
     DATADIR = TRAIN_DATADIR + '_test/'
 else:
@@ -17,7 +22,7 @@ logger = Logger(DATADIR, SAVE_NAME)
 logger.write_file(__file__)
 
 # vlist = np.hstack([np.arange(0, 1, 0.1) + i for i in np.arange(5, 9)])
-vlist = np.arange(5.0, 21.0, 1)
+vlist = np.arange(5.0, 9.0, 1)
 # flist = [0.5, 0.8, 1.1]
 flist = [1.0]
 print('vlist', vlist)
@@ -75,12 +80,12 @@ for ind in range(4):
 for ind in range(2):
     _, param = dp.data_normalize(np.vstack(np.vstack(all_friction_control))[:, ind])
     normalization_param.append(param)
-print('normalization_param', np.array(normalization_param).shape, 
+print('dyna_norm_params', np.array(normalization_param).shape, 
       np.isnan(np.array(normalization_param)).sum(), 
       np.isinf(np.array(normalization_param)).sum())
 
 c = ConfigYAML()
-c.normalization_param = normalization_param
+c.dyna_norm_params = normalization_param
 c.save_file(DATADIR + 'config' + SAVE_NAME + '.yaml')
 
 # plt.plot(np.arange(dynamics.shape[0]), dynamics[:, 0], '.', markersize=1)
@@ -114,7 +119,14 @@ for ind, friction_ in enumerate(flist):
         states = np.vstack([states[i:i+TRAIN_SEGMENT][None, :] for i in range(1, len(states)-TRAIN_SEGMENT+1, TRAIN_SEGMENT)])
         controls = np.vstack([controls[i:i+TRAIN_SEGMENT][None, :] for i in range(1, len(controls)-TRAIN_SEGMENT+1, TRAIN_SEGMENT)])
         dynamics = (states[:, 1:, :] - states[:, :-1, :]) / TIME_INTERVAL
-        print(np.sum(dynamics * 0.1 + states[:, 0, :] - states[:, 1, :]))
+        # print(np.sum(dynamics * 0.1 + states[:, 0, :] - states[:, 1, :]))
+        # if (np.abs(np.sum(dynamics * 0.1 + states[:, 0, :] - states[:, 1, :])) > 0.01):
+            # print(ind, friction_, segment_ind, 'dynamics not equal to states', 
+            #       np.sum(dynamics * 0.1 + states[:, 0, :] - states[:, 1, :]))
+            # print('states', states.shape, states[0, 0, :])
+            # print('dynamics', dynamics.shape, dynamics[0, 0, :])
+            # print('controls', controls.shape, controls[0, 0, :])
+            # continue
         label = [ind] * dynamics.shape[0]
         
         # for ind2 in range(4):
@@ -149,6 +161,9 @@ print('train_states', train_states_fric.shape)
 print('train_controls_fric', train_controls_fric.shape)
 print('train_dynamics_fric', train_dynamics_fric.shape)
 print('train_labels', train_labels_fric.shape)
+
+
+# print("  .")
 
 
 
